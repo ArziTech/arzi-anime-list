@@ -6,7 +6,7 @@ import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Menu, X, Search } from 'lucide-react'
 import { useState, useEffect } from 'react'
-
+import logo from '@/public/logo.png'
 type Theme = 'light' | 'dark'
 
 const navItems = [
@@ -56,7 +56,7 @@ export function Navbar() {
         <Link href="/" className="flex items-center space-x-2">
           <div className="relative w-8 h-8">
             <Image
-              src="/logo.png"
+              src={logo}
               alt="Arzi Anime List"
               fill
               className="object-contain"
@@ -74,9 +74,8 @@ export function Navbar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`text-sm font-medium transition-colors hover:text-primary ${
-                pathname === item.href ? 'text-primary' : 'text-muted-foreground'
-              }`}
+              className={`text-sm font-medium transition-colors hover:text-primary ${pathname === item.href ? 'text-primary' : 'text-muted-foreground'
+                }`}
             >
               {item.label}
             </Link>
@@ -170,9 +169,8 @@ export function Navbar() {
                 key={item.href}
                 href={item.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`text-sm font-medium transition-colors ${
-                  pathname === item.href ? 'text-primary' : 'text-muted-foreground'
-                }`}
+                className={`text-sm font-medium transition-colors ${pathname === item.href ? 'text-primary' : 'text-muted-foreground'
+                  }`}
               >
                 {item.label}
               </Link>
