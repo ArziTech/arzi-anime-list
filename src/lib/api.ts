@@ -2,13 +2,14 @@ import { Anime, AnimeListResponse, AnimeParams } from '@/types/anime'
 
 const JIKAN_API_BASE = 'https://api.jikan.moe/v4'
 
-export type { AnimeParams }
+export type { Anime, AnimeListResponse, AnimeParams }
 
 export async function getTopAnime(params: AnimeParams = {}): Promise<AnimeListResponse> {
   const { page = 1, limit = 24 } = params
 
   const response = await fetch(
-    `${JIKAN_API_BASE}/top/anime?page=${page}&limit=${limit}`
+    `${JIKAN_API_BASE}/top/anime?page=${page}&limit=${limit}`,
+    { next: { revalidate: 900 } }
   )
 
   if (!response.ok) {
@@ -27,7 +28,10 @@ export async function searchAnime(params: AnimeParams = {}): Promise<AnimeListRe
     }
   })
 
-  const response = await fetch(`${JIKAN_API_BASE}/anime?${searchParams.toString()}`)
+  const response = await fetch(
+    `${JIKAN_API_BASE}/anime?${searchParams.toString()}`,
+    { next: { revalidate: 600 } }
+  )
 
   if (!response.ok) {
     throw new Error('Failed to search anime')
@@ -37,7 +41,10 @@ export async function searchAnime(params: AnimeParams = {}): Promise<AnimeListRe
 }
 
 export async function getAnimeById(id: number): Promise<Anime> {
-  const response = await fetch(`${JIKAN_API_BASE}/anime/${id}/full`)
+  const response = await fetch(
+    `${JIKAN_API_BASE}/anime/${id}/full`,
+    { next: { revalidate: 3600 } }
+  )
 
   if (!response.ok) {
     throw new Error('Failed to fetch anime details')
@@ -51,7 +58,8 @@ export async function getAiringAnime(params: AnimeParams = {}): Promise<AnimeLis
   const { page = 1, limit = 25 } = params
 
   const response = await fetch(
-    `${JIKAN_API_BASE}/top/anime?type=tv&filter=airing&page=${page}&limit=${limit}`
+    `${JIKAN_API_BASE}/top/anime?type=tv&filter=airing&page=${page}&limit=${limit}`,
+    { next: { revalidate: 600 } }
   )
 
   if (!response.ok) {
@@ -64,9 +72,9 @@ export async function getAiringAnime(params: AnimeParams = {}): Promise<AnimeLis
 export async function getCompletedAnime(params: AnimeParams = {}): Promise<AnimeListResponse> {
   const { page = 1, limit = 25 } = params
 
-  // Use top anime endpoint ordered by score (mostly completed shows)
   const response = await fetch(
-    `${JIKAN_API_BASE}/top/anime?page=${page}&limit=${limit}`
+    `${JIKAN_API_BASE}/top/anime?page=${page}&limit=${limit}`,
+    { next: { revalidate: 3600 } }
   )
 
   if (!response.ok) {
@@ -76,12 +84,12 @@ export async function getCompletedAnime(params: AnimeParams = {}): Promise<Anime
   return response.json()
 }
 
-// Get all airing anime for client-side filtering by day
 export async function getAllAiringAnime(params: AnimeParams = {}): Promise<AnimeListResponse> {
   const { page = 1, limit = 25 } = params
 
   const response = await fetch(
-    `${JIKAN_API_BASE}/top/anime?type=tv&filter=airing&page=${page}&limit=${limit}`
+    `${JIKAN_API_BASE}/top/anime?type=tv&filter=airing&page=${page}&limit=${limit}`,
+    { next: { revalidate: 600 } }
   )
 
   if (!response.ok) {
@@ -89,4 +97,19 @@ export async function getAllAiringAnime(params: AnimeParams = {}): Promise<Anime
   }
 
   return response.json()
+}
+
+// Server actions for home page
+export async function getFeaturedAiringAnime() {
+  const data = await getAiringAnime({ limit: 6 })
+  return data.data
+    .filter(anime => anime.status === 'Currently Airing' || anime.airing === true)
+    .slice(0, 6)
+}
+
+export async function getFeaturedCompletedAnime() {
+  const data = await getTopAnime({ limit: 25 })
+  return data.data
+    .filter(anime => anime.status === 'Finished Airing' || anime.airing === false)
+    .slice(0, 6)
 }

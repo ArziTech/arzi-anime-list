@@ -1,36 +1,40 @@
-import { getTopAnime, getAiringAnime } from '@/lib/api'
-import { AnimeCard } from '@/components/anime-card'
-import { Button } from '@/components/ui/button'
-import Link from 'next/link'
+import { getFeaturedAiringAnime, getFeaturedCompletedAnime } from '@/lib/api'
+import { HomePageContent } from '@/components/home-page-content'
+import { QueryClient } from '@tanstack/react-query'
+import { dehydrate } from '@tanstack/react-query'
 
-// Revalidate every 15 minutes (900 seconds)
+// Revalidate every 15 minutes
 export const revalidate = 900
 
-async function getFeaturedAnime() {
-  // Fetch data in parallel
-  const [airingData, topData] = await Promise.all([
-    getAiringAnime({ limit: 6 }),
-    getTopAnime({ limit: 25 }),
+export default async function HomePage() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 60 * 1000,
+      },
+    },
+  })
+
+  // Fetch data server-side for initial render
+  const [initialAiring, initialCompleted] = await Promise.all([
+    getFeaturedAiringAnime(),
+    getFeaturedCompletedAnime(),
   ])
 
-  // Filter for on-going (currently airing)
-  const airingAnime = airingData.data
-    .filter(anime => anime.status === 'Currently Airing' || anime.airing === true)
-    .slice(0, 6)
+  // Prefetch queries for client-side
+  await queryClient.prefetchQuery({
+    queryKey: ['anime', 'featured-airing'],
+    queryFn: getFeaturedAiringAnime,
+  })
+  await queryClient.prefetchQuery({
+    queryKey: ['anime', 'featured-completed'],
+    queryFn: getFeaturedCompletedAnime,
+  })
 
-  // Filter for completed (finished airing)
-  const completedAnime = topData.data
-    .filter(anime => anime.status === 'Finished Airing' || anime.airing === false)
-    .slice(0, 6)
-
-  return { airingAnime, completedAnime }
-}
-
-export default async function HomePage() {
-  const { airingAnime, completedAnime } = await getFeaturedAnime()
+  const dehydratedState = dehydrate(queryClient)
 
   return (
-    <main>
+    <>
       {/* Hero Section */}
       <section className="border-b bg-muted/30">
         <div className="container mx-auto py-12 md:py-20 px-4">
@@ -43,35 +47,11 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* Featured On Going */}
-      <section className="container mx-auto py-8 px-4">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold">Featured On Going</h2>
-          <Link href="/on-going">
-            <Button variant="outline">View All</Button>
-          </Link>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-          {airingAnime.map((anime) => (
-            <AnimeCard key={anime.mal_id} anime={anime} />
-          ))}
-        </div>
-      </section>
-
-      {/* Featured Completed */}
-      <section className="container mx-auto py-8 px-4">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold">Featured Completed</h2>
-          <Link href="/completed">
-            <Button variant="outline">View All</Button>
-          </Link>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
-          {completedAnime.map((anime) => (
-            <AnimeCard key={anime.mal_id} anime={anime} />
-          ))}
-        </div>
-      </section>
-    </main>
+      {/* Client Component with TanStack Query */}
+      <HomePageContent
+        initialAiring={initialAiring}
+        initialCompleted={initialCompleted}
+      />
+    </>
   )
 }
