@@ -7,16 +7,29 @@ export type { Anime, AnimeListResponse, AnimeParams }
 export async function getTopAnime(params: AnimeParams = {}): Promise<AnimeListResponse> {
   const { page = 1, limit = 24 } = params
 
-  const response = await fetch(
-    `${JIKAN_API_BASE}/top/anime?page=${page}&limit=${limit}`,
-    { next: { revalidate: 900 } }
-  )
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
 
-  if (!response.ok) {
-    throw new Error('Failed to fetch top anime')
+  try {
+    const response = await fetch(
+      `${JIKAN_API_BASE}/top/anime?page=${page}&limit=${limit}`,
+      {
+        next: { revalidate: 900 },
+        signal: controller.signal,
+      }
+    )
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch top anime')
+    }
+
+    return response.json()
+  } catch (error) {
+    clearTimeout(timeoutId)
+    throw error
   }
-
-  return response.json()
 }
 
 export async function searchAnime(params: AnimeParams = {}): Promise<AnimeListResponse> {
@@ -57,16 +70,29 @@ export async function getAnimeById(id: number): Promise<Anime> {
 export async function getAiringAnime(params: AnimeParams = {}): Promise<AnimeListResponse> {
   const { page = 1, limit = 25 } = params
 
-  const response = await fetch(
-    `${JIKAN_API_BASE}/top/anime?type=tv&filter=airing&page=${page}&limit=${limit}`,
-    { next: { revalidate: 600 } }
-  )
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 10000)
 
-  if (!response.ok) {
-    throw new Error('Failed to fetch airing anime')
+  try {
+    const response = await fetch(
+      `${JIKAN_API_BASE}/top/anime?type=tv&filter=airing&page=${page}&limit=${limit}`,
+      {
+        next: { revalidate: 600 },
+        signal: controller.signal,
+      }
+    )
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch airing anime')
+    }
+
+    return response.json()
+  } catch (error) {
+    clearTimeout(timeoutId)
+    throw error
   }
-
-  return response.json()
 }
 
 export async function getCompletedAnime(params: AnimeParams = {}): Promise<AnimeListResponse> {

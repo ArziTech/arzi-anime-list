@@ -1,42 +1,85 @@
-'use client'
-
-import { useAnime } from '@/lib/hooks/useAnime'
-import { AnimeCardSkeleton } from '@/components/anime-skeleton'
+import { notFound } from 'next/navigation'
+import { getTopAnime } from '@/lib/api'
+import Image from 'next/image'
+import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import Link from 'next/link'
-import Image from 'next/image'
-import { use } from 'react'
 
-export default function AnimeDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params)
-  const { data: anime, isLoading } = useAnime(Number(id))
+// Generate static params for top anime
+// Returning empty array to allow all routes to be generated on-demand (ISR)
+// This prevents 404s for anime not in the top 25
+export async function generateStaticParams() {
+  // Return empty array - all pages will be generated on-demand
+  // This ensures any valid anime ID will work
+  return []
+}
 
-  if (isLoading) {
-    return (
-      <main className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto space-y-6">
-          <AnimeCardSkeleton />
-        </div>
-      </main>
-    )
+// Revalidate every hour - enables ISR for on-demand generation
+export const revalidate = 3600
+
+async function getAnime(id: string) {
+  // Retry function for fetch
+  async function fetchWithRetry(url: string, retries = 3): Promise<Response> {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
+
+        const response = await fetch(url, {
+          next: { revalidate: 3600 },
+          signal: controller.signal,
+        })
+
+        clearTimeout(timeoutId)
+
+        if (response.ok) {
+          return response
+        }
+
+        if (i === retries - 1) {
+          return response
+        }
+      } catch (error) {
+        if (i === retries - 1) {
+          throw error
+        }
+        // Wait before retrying (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000))
+      }
+    }
+    throw new Error('Max retries reached')
   }
 
+  try {
+    const response = await fetchWithRetry(`https://api.jikan.moe/v4/anime/${id}/full`, 3)
+
+    if (!response.ok) {
+      console.error(`Failed to fetch anime ${id}: ${response.status}`)
+      return null
+    }
+
+    const data = await response.json()
+    return data.data
+  } catch (error) {
+    console.error(`Error fetching anime ${id}:`, error)
+    return null
+  }
+}
+
+interface AnimeDetailPageProps {
+  params: Promise<{ id: string }>
+}
+
+export default async function AnimeDetailPage({ params }: AnimeDetailPageProps) {
+  const { id } = await params
+  const anime = await getAnime(id)
+
   if (!anime) {
-    return (
-      <main className="container mx-auto px-4 py-8">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold">Anime not found</h1>
-          <Link href="/">
-            <Button className="mt-4">Back to Home</Button>
-          </Link>
-        </div>
-      </main>
-    )
+    notFound()
   }
 
   return (
-    <main className="">
+    <main>
       <div className="max-w-5xl mx-auto py-8 px-4">
         <div className="grid lg:grid-cols-[280px_1fr] gap-6 lg:gap-10 items-start">
           {/* Poster - Sticky */}
@@ -72,7 +115,7 @@ export default function AnimeDetailPage({ params }: { params: Promise<{ id: stri
 
             {/* Genres */}
             <div className="flex flex-wrap gap-1.5">
-              {anime.genres.map((genre) => (
+              {anime.genres.map((genre: { mal_id: number; name: string }) => (
                 <Badge key={genre.mal_id} variant="secondary" className="text-xs">
                   {genre.name}
                 </Badge>
@@ -95,20 +138,19 @@ export default function AnimeDetailPage({ params }: { params: Promise<{ id: stri
               </div>
               <div>
                 <span className="text-muted-foreground text-xs">Studios</span>
-                <p className="font-medium text-xs">{anime.studios.map((s) => s.name).join(', ') || '-'}</p>
+                <p className="font-medium text-xs">{anime.studios.map((s: { name: string }) => s.name).join(', ') || '-'}</p>
               </div>
             </div>
 
             {/* Synopsis */}
             <div>
-              <h2 className="text-lg  font-semibold mb-2">Synopsis</h2>
+              <h2 className="text-lg font-semibold mb-2">Synopsis</h2>
               <p className="text-muted-foreground text-justify leading-relaxed text-sm">
                 {anime.synopsis || 'No synopsis available.'}
               </p>
             </div>
           </div>
         </div>
-
       </div>
     </main>
   )

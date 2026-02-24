@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Menu, X, Search } from 'lucide-react'
 import { useState, useEffect } from 'react'
@@ -53,7 +54,16 @@ export function Navbar() {
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         {/* Logo */}
         <Link href="/" className="flex items-center space-x-2">
-          <span className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+          <div className="relative w-8 h-8">
+            <Image
+              src="/logo.png"
+              alt="Arzi Anime List"
+              fill
+              className="object-contain"
+              priority
+            />
+          </div>
+          <span className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent hidden sm:inline-block">
             Arzi Anime List
           </span>
         </Link>

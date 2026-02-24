@@ -1,75 +1,73 @@
 import { getTopAnime } from '@/lib/api'
-import { AnimeHorizontalCard } from '@/components/anime-horizontal-card'
-import { Button } from '@/components/ui/button'
-import Link from 'next/link'
+import { CompletedPageContent } from '@/components/completed-page-content'
+import { QueryClient } from '@tanstack/react-query'
+import { dehydrate } from '@tanstack/react-query'
+import { HydrationBoundary } from '@tanstack/react-query'
 
-// Revalidate every hour (3600 seconds)
+// Revalidate every hour
 export const revalidate = 3600
-
-async function getCompletedAnimeData() {
-  // Fetch multiple pages
-  const pages = await Promise.all([
-    getTopAnime({ limit: 25, page: 1 }),
-    getTopAnime({ limit: 25, page: 2 }),
-    getTopAnime({ limit: 25, page: 3 }),
-    getTopAnime({ limit: 25, page: 4 }),
-  ])
-
-  return pages
-    .flatMap(p => p.data)
-    .filter(anime => anime.status === 'Finished Airing' || anime.airing === false)
-}
 
 interface CompletedPageProps {
   searchParams: Promise<{ page?: string }>
 }
 
+async function getCompletedAnimeData() {
+  try {
+    // Fetch multiple pages with error handling
+    const pages = await Promise.allSettled([
+      getTopAnime({ limit: 25, page: 1 }),
+      getTopAnime({ limit: 25, page: 2 }),
+      getTopAnime({ limit: 25, page: 3 }),
+      getTopAnime({ limit: 25, page: 4 }),
+    ])
+
+    return pages
+      .filter((p): p is PromiseFulfilledResult<Awaited<ReturnType<typeof getTopAnime>>> => p.status === 'fulfilled')
+      .flatMap(p => p.value.data)
+      .filter(anime => anime.status === 'Finished Airing' || anime.airing === false)
+  } catch (error) {
+    console.error('Error fetching completed anime:', error)
+    return []
+  }
+}
+
 export default async function CompletedPage({ searchParams }: CompletedPageProps) {
   const { page: pageParam = '1' } = await searchParams
-  const page = parseInt(pageParam)
-  const pageSize = 25
+  const initialPage = parseInt(pageParam)
 
-  const allAnime = await getCompletedAnimeData()
-  const totalPages = Math.ceil(allAnime.length / pageSize)
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 60 * 60 * 1000, // 1 hour
+      },
+    },
+  })
 
-  // Get current page data
-  const startIndex = (page - 1) * pageSize
-  const endIndex = startIndex + pageSize
-  const currentPageAnime = allAnime.slice(startIndex, endIndex)
+  // Fetch data server-side for initial render
+  const initialAnime = await getCompletedAnimeData()
 
-  const hasNextPage = page < totalPages
-  const hasPrevPage = page > 1
+  // Prefetch query for client-side
+  await queryClient.prefetchQuery({
+    queryKey: ['anime', 'completed'],
+    queryFn: async () => {
+      const pages = await Promise.allSettled([
+        getTopAnime({ limit: 25, page: 1 }),
+        getTopAnime({ limit: 25, page: 2 }),
+        getTopAnime({ limit: 25, page: 3 }),
+        getTopAnime({ limit: 25, page: 4 }),
+      ])
+      return pages
+        .filter((p): p is PromiseFulfilledResult<Awaited<ReturnType<typeof getTopAnime>>> => p.status === 'fulfilled')
+        .flatMap(p => p.value.data)
+        .filter(anime => anime.status === 'Finished Airing' || anime.airing === false)
+    },
+  })
+
+  const dehydratedState = dehydrate(queryClient)
 
   return (
-    <main>
-      <div className="container mx-auto py-8 px-4">
-        <h1 className="text-3xl font-bold mb-8">Completed Anime</h1>
-
-        <div className="space-y-4">
-          {currentPageAnime.map((anime) => (
-            <AnimeHorizontalCard key={anime.mal_id} anime={anime} />
-          ))}
-        </div>
-
-        {/* Pagination */}
-        <div className="flex justify-center items-center gap-4 mt-8">
-          {hasPrevPage && (
-            <Link href={`/completed?page=${page - 1}`}>
-              <Button variant="outline">Previous</Button>
-            </Link>
-          )}
-
-          <span className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
-          </span>
-
-          {hasNextPage && (
-            <Link href={`/completed?page=${page + 1}`}>
-              <Button>Next</Button>
-            </Link>
-          )}
-        </div>
-      </div>
-    </main>
+    <HydrationBoundary state={dehydratedState}>
+      <CompletedPageContent initialAnime={initialAnime} initialPage={initialPage} />
+    </HydrationBoundary>
   )
 }
