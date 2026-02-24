@@ -36,6 +36,9 @@ export function Footer() {
         {/* Bottom tagline */}
         <div className="mt-6 pt-6 border-t text-center text-xs text-muted-foreground">
           <p>Discover your next favorite anime</p>
+          <p className="mt-2">
+            Made by <a href="https://github.com/ArziTech" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">Arzi</a>
+          </p>
         </div>
       </div>
     </footer>
