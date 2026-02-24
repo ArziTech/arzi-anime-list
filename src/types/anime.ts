@@ -20,6 +20,7 @@ export interface Anime {
   episodes: number
   status: string
   airing: boolean
+  type: string
   genres: Array<{
     mal_id: number
     name: string
