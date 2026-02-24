@@ -1,6 +1,9 @@
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 
+// Static page - no revalidation needed
+export const dynamic = 'force-static'
+
 export async function generateMetadata() {
   return {
     title: 'Favorites',
@@ -11,7 +14,7 @@ export async function generateMetadata() {
 
 export default function FavoritePage() {
   return (
-    <main className="">
+    <main>
       <div className="container mx-auto py-20 px-4">
         <div className="text-center max-w-md mx-auto space-y-6">
           <div className="text-6xl"></div>
