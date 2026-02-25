@@ -1,29 +1,87 @@
 import { notFound } from 'next/navigation'
-import { getTopAnime } from '@/lib/api'
+import { Metadata } from 'next'
+import { getStaticAnimeParams, getStaticAnimeById } from '@/lib/constant-anime-list'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
-// Generate static params for top anime
-// Returning empty array to allow all routes to be generated on-demand (ISR)
-// This prevents 404s for anime not in the top 25
+interface AnimeDetailPageProps {
+  params: Promise<{ id: string }>
+}
+
+// Generate metadata for SEO using static anime data
+export async function generateMetadata({ params }: AnimeDetailPageProps): Promise<Metadata> {
+  const { id } = await params
+  const staticAnime = getStaticAnimeById(parseInt(id))
+
+  if (!staticAnime) {
+    return {
+      title: 'Anime Not Found - Arzi Anime List',
+      description: 'The requested anime could not be found.',
+    }
+  }
+
+  const genresText = staticAnime.genres.join(', ')
+  const statusText = staticAnime.status === 'Currently Airing' ? 'Now Airing' : staticAnime.status
+  const yearText = staticAnime.year ? `${staticAnime.year} Anime` : 'Anime'
+
+  return {
+    title: `${staticAnime.title} - ${yearText} | Arzi Anime List`,
+    description: `Watch ${staticAnime.title}, a ${staticAnime.type} ${statusText} ${genresText} anime. Complete information about episodes, release date, and more.`,
+    keywords: [
+      staticAnime.title,
+      ...staticAnime.genres,
+      statusText,
+      yearText,
+      'anime',
+      'watch anime',
+      'anime streaming',
+      staticAnime.slug,
+    ].join(', '),
+    openGraph: {
+      title: staticAnime.title,
+      description: `Discover ${staticAnime.title}, a ${staticAnime.type} ${genresText} anime that is ${statusText.toLowerCase()}.`,
+      type: 'website',
+      url: `https://arzianime.list/anime/${staticAnime.id}`,
+      siteName: 'Arzi Anime List',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: staticAnime.title,
+      description: `${statusText} ${genresText} anime - ${staticAnime.title}`,
+    },
+    alternates: {
+      canonical: `https://arzianime.list/anime/${staticAnime.id}`,
+    },
+  }
+}
+
+// Generate static params for popular anime
+// Pre-renders known popular anime at build time
 export async function generateStaticParams() {
-  // Return empty array - all pages will be generated on-demand
-  // This ensures any valid anime ID will work
-  return []
+  return getStaticAnimeParams()
 }
 
 // Revalidate every hour - enables ISR for on-demand generation
 export const revalidate = 3600
 
+// Global request tracker to add delays during build
+let requestCount = 0
+const BUILD_DELAY = 2000 // 2 seconds between requests during build
+
 async function getAnime(id: string) {
-  // Retry function for fetch
+  // Add delay during build to avoid rate limiting
+  if (process.env.NODE_ENV === 'production' && process.env.NEXT_PHASE === 'phase-build') {
+    await new Promise(resolve => setTimeout(resolve, BUILD_DELAY))
+  }
+
+  // Retry function for fetch with longer delays
   async function fetchWithRetry(url: string, retries = 3): Promise<Response> {
     for (let i = 0; i < retries; i++) {
       try {
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
 
         const response = await fetch(url, {
           next: { revalidate: 3600 },
@@ -32,8 +90,16 @@ async function getAnime(id: string) {
 
         clearTimeout(timeoutId)
 
-        if (response.ok) {
+        if (response.ok || response.status === 404) {
           return response
+        }
+
+        // Rate limited (429) - wait longer before retry
+        if (response.status === 429) {
+          const waitTime = 5000 + (i * 5000) // 5s, 10s, 15s
+          console.log(`Rate limited, waiting ${waitTime}ms before retry...`)
+          await new Promise(resolve => setTimeout(resolve, waitTime))
+          continue
         }
 
         if (i === retries - 1) {
@@ -44,7 +110,7 @@ async function getAnime(id: string) {
           throw error
         }
         // Wait before retrying (exponential backoff)
-        await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000))
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 2000))
       }
     }
     throw new Error('Max retries reached')
